@@ -171,6 +171,10 @@ The qq-plot shows that this is indeed the case.
 2. The errors should also have homogeneous variance. The Breusch-Pagan test gives a p-value greater than $0.05$, so we accept the hypothesis of homoscedasticity.
 
 ```{r}
+```
+
+
+```{r}
 bptest(pca_model)
 ```
 
@@ -202,5 +206,36 @@ hist(data$Answer)
 exp <- data$Answer - 1
 model <- aov(data$Answer~exp)
 summary.aov(model)
+```
+```{r}
+eval_with_pca <- function(factors, rotation, pca_model) {
+  pca_factors <- rotation %*% factors
+  answer = pca_model$coefficients %*% c(1,pca_factors[c(1,2)]) 
+  return(answer)
+}
+
+data_min <- apply(data, 2, min)
+data_max <- apply(data, 2, max)
+neutral <-colMeans(data)
+doe <-(data[1,])
+doe[1,] <- neutral
+doe <- cbind(Level="neutral", doe)
+doe[1, 12]<- eval_with_pca(neutral[-11], pca$rotation, pca_model)
+
+for (i in 1:10) {
+  newdata<-neutral[-11]
+  names(newdata)<-NULL
+  newdata[i]<-data_min[i]
+  ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+  row<-c(paste("min", i), newdata, ans)
+  doe[2*i,]<-row
+  newdata[i]<-data_max[i]
+  ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+  row<-c(paste("max", i), newdata, ans)
+  doe[2*i+1,]<-row
+}
+for(i in 21:)
+view(doe)
+
 ```
 
