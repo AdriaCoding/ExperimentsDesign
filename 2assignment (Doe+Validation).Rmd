@@ -1,0 +1,334 @@
+---
+title: "SMDE: Second Assignment"
+author: "Adrià Lisa"
+date: "2023-12-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## 1. Defining our own RNG
+We define a function to define $n$ pseudo-random numbers between $[0,1)$ with a given *seed*, for reproducibility.
+A congruential generator was used, with the following hyperparameters:
+
+* Module $m = 2^32$.
+* Multiplicative factor $a = 4 \cdot 777 + 1$.
+* Additive factor $c = 50033$.
+
+A list of RN is generated via the recurrence $Z_i = a Z_{i-1} + c \,\, (mod \,m)$, where $Z_0$ is the value of the *seed*, set by default to the prime number $26107$.
+```{r}
+My_RNG <- function (n, seed=26107) {
+  #Congruent mixt sequence of numbers (best if c and Z0 are prime)
+  m = 2^32; a = 4*777+1; c = 50033 ;
+  R = integer(n); R[1] <- (a*seed + c)%%m 
+  for (i in 1:(n-1)){
+    R[i+1] <- (a*R[i] + c)%%m
+  }
+  R = R / m # in [0, 1)
+  return(R)
+}
+```
+Our teacher (Pau Fonseca) explained in class that although it is not mathematically proven, it has been empirically observed that choosing the seed to be a prime number often leads to better results.
+
+As part of our validation process, we tested our RNG with different empirical tests from the ```{r} randtests``` library, obtaining a reasonably high confidence in the hypothesis of "randomness".
+
+```{r}
+R = My_RNG(10000)
+library(randtests)
+bartels.rank.test(R)
+turning.point.test(R)
+cox.stuart.test(R)
+difference.sign.test(R)
+rank.test(R)
+```
+## 2. Simulating our data
+We created a table of numeric data, using R's standard RNG, and save it in the file "rngdata.csv"
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Number of individuals and factors
+num_individuals <- 2000
+num_factors <- 10
+
+# Create an empty data frame
+data <- data.frame(matrix(NA, nrow = num_individuals, ncol = num_factors + 1))
+colnames(data) <- c(paste("Factor", 1:num_factors, sep = ""), "Answer")
+
+# Define distributions for Factor 1 to 5
+for (i in 1:5) {
+  data[, i] <- runif(num_individuals, min=0, max = 10)
+}
+
+# Define linear functions for Factor 6 to 10
+
+data$Factor6 <- 6*data$Factor1 + data$Factor3
+data$Factor7 <- data$Factor1 + data$Factor2 + data$Factor3 + data$Factor4 + data$Factor5
+data$Factor8 <- data$Factor1 - data$Factor5
+data$Factor9 <- 3*data$Factor3 - 2*data$Factor4
+data$Factor10 <- -7*data$Factor2 - 5*data$Factor4
+
+# Answer variable is just the sum of all factors + noise
+data$Answer <- rowSums(data[,4:6]) + rnorm(num_individuals)
+write.csv(data, "rngdata.csv", row.names = FALSE)
+
+
+```
+
+## 3. Obtain an expression to generate new data
+Everithing here is just an output of chatgpt, it has not been reviewed and thus it can be considered to be all wrong.
+```{r}
+# Load the required libraries
+library(tidyverse)
+
+# Read the CSV file
+data <- read.csv("rngdata.csv")
+
+# Correlation matrix
+cor_matrix <- cor(data)
+print("Correlation Matrix:")
+print(cor_matrix)
+
+# Simple linear regression for each factor vs. Answer
+for (i in 1:10) {
+  lm_model <- lm(Answer ~ data[, i], data = data)
+  print(paste("Linear Regression for Factor", i, "vs. Answer:"))
+  print(summary(lm_model))
+}
+```
+
+We now see what happens when we build a multiple linear regression (MLR), with all the factors
+```{r}
+# Multiple linear regression
+mlr_model <- lm(Answer ~ ., data = data)
+print("Multiple Linear Regression:")
+print(summary(mlr_model))
+```
+Since only the factors from 1 to 5 are independent variables, they are the only ones that are found relevant for the MLR. 
+
+
+```{r}
+# Plot residuals vs. fitted values for the multiple linear regression
+plot(mlr_model$fitted.values, mlr_model$residuals, main = "Residuals vs. Fitted", xlab = "Fitted Values", ylab = "Residuals")
+
+
+# Anova for the multiple linear regression
+anova_result <- anova(mlr_model)
+print("ANOVA for Multiple Linear Regression:")
+print(anova_result)
+
+# Plot the residuals to check for normality
+hist(mlr_model$residuals, main = "Histogram of Residuals", xlab = "Residuals")
+
+# Q-Q plot for the residuals
+qqnorm(mlr_model$residuals)
+qqline(mlr_model$residuals)
+
+# Boxplot of residuals
+boxplot(mlr_model$residuals, main = "Boxplot of Residuals")
+
+# Check for homoscedasticity
+plot(mlr_model$fitted.values, abs(mlr_model$residuals), main = "Residuals vs. Fitted Values (Homoscedasticity Check)", xlab = "Fitted Values", ylab = "Absolute Residuals")
+
+# Additional exploratory analysis as needed
+
+# Save plots or results as needed
+# Example: save the scatterplot matrix as an image file
+png("scatterplot_matrix.png")
+pairs(data)
+dev.off()
+
+```
+
+However, we believe that we can build a lighter model, that contains less than 5 components. To do so, we now perform a principal component analysis (PCA).
+
+```{r}
+pca<-prcomp(data[, -ncol(data)])
+summary(pca)
+```
+
+Since we can achive 88% explainablity by just taking the first 2 components, we will build a linear model from PC1 and PC2. 
+```{r}
+pca_data <- as.data.frame(cbind(pca$x[,1:2], data$Answer))
+pca_model <- lm(V3 ~ ., data = pca_data)
+summary(pca_model)
+
+```
+All the test statistics of this models are also very good, so we will prefer this one over the MLR with all the factors because it is lighter. 
+
+Even so, we will now make some tests on this model
+
+1. First, the error term must be normally distributed:
+```{r}
+qqnorm(residuals(pca_model))
+```
+The qq-plot shows that this is indeed the case.
+
+2. The errors should also have homogeneous variance. The Breusch-Pagan test gives a p-value greater than $0.05$, so we accept the hypothesis of homoscedasticity.
+```{r}
+library(lmtest)
+bptest(pca_model)
+```
+
+3. The errors should also be independent. The Durbin-Watson statistic is very close to $2.0$, thus, we can say there is no autocorrelation in the residuals.
+```{r}
+dwtest(pca_model)
+```
+
+We need not test if there is correlation among the four selected principal components, because this holds by definition.
+
+
+```{r}
+
+queue_time1 <- pca_model$coefficients[2]*pca_data$PC1
+mean(queue_time1)
+min(queue_time1)
+sd(queue_time1)
+pca_model$coefficients[3]
+queue_time2 <- pca_model$coefficients[3]*pca_data$PC2
+mean(queue_time2)
+min(queue_time2)
+sd(queue_time2)
+```
+
+```{r}
+hist(data$Answer)
+```
+```{r}
+###Operational Validation###
+n <- nrow(pca_data)
+data.sample1 <- sample(1:n, round(0.67*n))
+data.set1 <- pca_data[data.sample1, ] 
+test.set1 <- pca_data[-data.sample1, ] 
+data.model1 <- pca_model
+
+?predict
+yhat<-predict(data.model1, data.set1, interval="prediction")
+yhat
+
+y<-test.set1$Answer
+
+error<-cbind(yhat[,1,drop=FALSE],y,(y-yhat[,1])^2)
+sqr_err<-error[,1]
+mse<-mean(sqr_err)
+
+### Root Mean Square Error ###
+RMSE1<-sqrt(mse/(nrow(test.set1)))
+RMSE1
+
+names(data.model1)
+RMSE_data1<- sqrt(mean((pca_model$residuals)^2)/nrow(data.set1))
+RMSE_data1
+
+
+```
+
+3.Define a DOE(Definition of Experiments) to explore with the parametrization of the 10 factors the answer obtains the best value (we consider the minimum one to be the best value).
+
+```{r}
+exp <- data$Answer-1
+model <- aov(data$Answer~exp)
+summary.aov(model)
+
+```
+
+```{r}
+eval_with_pca <- function(factors, rotation, pca_model) {
+  pca_factors <- rotation %*% unlist(factors)
+  answer = pca_model$coefficients %*% c(1,pca_factors[c(1,2)]) 
+  return(answer)
+}
+
+neutral <- function(data){
+  sdevs <- apply(data, 2, sd)
+  means <- apply(data ,2, mean)
+  rand <-rnorm(10,means, sdevs)
+  return(rand)
+}
+
+run_experiments <- function(){
+  
+  data_min <- apply(data, 2, min)
+  data_max <- apply(data, 2, max)
+  doe <-(data[1,])
+  doe[1,1:10] <- neutral(data)
+  doe <- cbind(Level="neutral", doe)
+  
+  doe[1, ]$Answer <- eval_with_pca(doe[1,-c(1,12)], pca$rotation, pca_model)
+  
+  for (i in 1:10) {
+    newdata<-neutral(data)
+    names(newdata)<-NULL
+    newdata[i]<-data_min[i]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("-", i), newdata, ans)
+    doe[2*i,]<-row
+    newdata[i]<-data_max[i]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("+", i), newdata, ans)
+    doe[2*i+1,]<-row
+  
+  }
+  for(j in 1:9){
+    for( k in (j+1):10){
+    newdata<-neutral(data)
+    newdata[j]<-data_min[j]
+    newdata[k]<-data_min[k]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("-_-", j,k), newdata, ans)
+    doe <- rbind(doe,row)
+    newdata[j]<-data_min[j]
+    newdata[k]<-data_max[k]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("-_+", j,k), newdata, ans)
+    doe <- rbind(doe,row)
+    newdata[j]<-data_max[j]
+    newdata[k]<-data_min[k]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("+_-", j,k), newdata, ans)
+    doe <- rbind(doe,row)
+    newdata[j]<-data_max[j]
+    newdata[k]<-data_max[k]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("+_+", j,k), newdata, ans)
+    doe <- rbind(doe,row)
+    }
+  }
+  return(doe[c(1,12)])
+}
+
+```
+
+ANOVA tests for 1-factor and 2-factor
+
+```{r}
+
+subset_data <- doe[2:201, ]
+# 1-factor ANOVA
+for (i in 1:10) {
+  subset_data[, i] <- as.factor(subset_data[, i])
+  doe_model <- aov(Answer ~ subset_data[, i+1], data = subset_data)
+  print(paste("One-Factor ANOVA for Factor", i, "vs. Answer:"))
+  print(summary(doe_model))
+}
+
+```
+```{r}
+subset_data2 <- doe[2:144, ] 
+
+for (i in 1:9) {
+  for (j in (i + 1):10) {
+    subset_data2[, 1:10] <- lapply(subset_data2[, 1:10], as.factor)
+    # Two-Factor ANOVA
+    doe_model <- aov(Answer ~ subset_data2[, i+1] + subset_data2[, j+1], data = subset_data2)
+    # Print ANOVA summary
+    print(paste("Two-Factor ANOVA for Factor", i, "and Factor", j, "vs. Answer:"))
+    print(summary(doe_model))
+  }
+}
+
+```
