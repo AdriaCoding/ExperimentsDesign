@@ -169,12 +169,8 @@ qqnorm(residuals(pca_model))
 The qq-plot shows that this is indeed the case.
 
 2. The errors should also have homogeneous variance. The Breusch-Pagan test gives a p-value greater than $0.05$, so we accept the hypothesis of homoscedasticity.
-
 ```{r}
-```
-
-
-```{r}
+library(lmtest)
 bptest(pca_model)
 ```
 
@@ -203,39 +199,136 @@ sd(queue_time2)
 hist(data$Answer)
 ```
 ```{r}
-exp <- data$Answer - 1
+###Operational Validation###
+n <- nrow(pca_data)
+data.sample1 <- sample(1:n, round(0.67*n))
+data.set1 <- pca_data[data.sample1, ] 
+test.set1 <- pca_data[-data.sample1, ] 
+data.model1 <- pca_model
+
+?predict
+yhat<-predict(data.model1, data.set1, interval="prediction")
+yhat
+
+y<-test.set1$Answer
+
+error<-cbind(yhat[,1,drop=FALSE],y,(y-yhat[,1])^2)
+sqr_err<-error[,1]
+mse<-mean(sqr_err)
+
+### Root Mean Square Error ###
+RMSE1<-sqrt(mse/(nrow(test.set1)))
+RMSE1
+
+names(data.model1)
+RMSE_data1<- sqrt(mean((pca_model$residuals)^2)/nrow(data.set1))
+RMSE_data1
+
+
+```
+
+3.Define a DOE(Definition of Experiments) to explore with the parametrization of the 10 factors the answer obtains the best value (we consider the minimum one to be the best value).
+
+```{r}
+exp <- data$Answer-1
 model <- aov(data$Answer~exp)
 summary.aov(model)
+
 ```
+
 ```{r}
 eval_with_pca <- function(factors, rotation, pca_model) {
-  pca_factors <- rotation %*% factors
+  pca_factors <- rotation %*% unlist(factors)
   answer = pca_model$coefficients %*% c(1,pca_factors[c(1,2)]) 
   return(answer)
 }
 
-data_min <- apply(data, 2, min)
-data_max <- apply(data, 2, max)
-neutral <-colMeans(data)
-doe <-(data[1,])
-doe[1,] <- neutral
-doe <- cbind(Level="neutral", doe)
-doe[1, 12]<- eval_with_pca(neutral[-11], pca$rotation, pca_model)
-
-for (i in 1:10) {
-  newdata<-neutral[-11]
-  names(newdata)<-NULL
-  newdata[i]<-data_min[i]
-  ans <- eval_with_pca(newdata, pca$rotation, pca_model)
-  row<-c(paste("min", i), newdata, ans)
-  doe[2*i,]<-row
-  newdata[i]<-data_max[i]
-  ans <- eval_with_pca(newdata, pca$rotation, pca_model)
-  row<-c(paste("max", i), newdata, ans)
-  doe[2*i+1,]<-row
+neutral <- function(data){
+  sdevs <- apply(data, 2, sd)
+  means <- apply(data ,2, mean)
+  rand <-rnorm(10,means, sdevs)
+  return(rand)
 }
-for(i in 21:)
-view(doe)
+
+run_experiments <- function(){
+  
+  data_min <- apply(data, 2, min)
+  data_max <- apply(data, 2, max)
+  doe <-(data[1,])
+  doe[1,1:10] <- neutral(data)
+  doe <- cbind(Level="neutral", doe)
+  
+  doe[1, ]$Answer <- eval_with_pca(doe[1,-c(1,12)], pca$rotation, pca_model)
+  
+  for (i in 1:10) {
+    newdata<-neutral(data)
+    names(newdata)<-NULL
+    newdata[i]<-data_min[i]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("-", i), newdata, ans)
+    doe[2*i,]<-row
+    newdata[i]<-data_max[i]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("+", i), newdata, ans)
+    doe[2*i+1,]<-row
+  
+  }
+  for(j in 1:9){
+    for( k in (j+1):10){
+    newdata<-neutral(data)
+    newdata[j]<-data_min[j]
+    newdata[k]<-data_min[k]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("-_-", j,k), newdata, ans)
+    doe <- rbind(doe,row)
+    newdata[j]<-data_min[j]
+    newdata[k]<-data_max[k]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("-_+", j,k), newdata, ans)
+    doe <- rbind(doe,row)
+    newdata[j]<-data_max[j]
+    newdata[k]<-data_min[k]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("+_-", j,k), newdata, ans)
+    doe <- rbind(doe,row)
+    newdata[j]<-data_max[j]
+    newdata[k]<-data_max[k]
+    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
+    row<-c(paste("+_+", j,k), newdata, ans)
+    doe <- rbind(doe,row)
+    }
+  }
+  return(doe[c(1,12)])
+}
 
 ```
 
+ANOVA tests for 1-factor and 2-factor
+
+```{r}
+
+subset_data <- doe[2:201, ]
+# 1-factor ANOVA
+for (i in 1:10) {
+  subset_data[, i] <- as.factor(subset_data[, i])
+  doe_model <- aov(Answer ~ subset_data[, i+1], data = subset_data)
+  print(paste("One-Factor ANOVA for Factor", i, "vs. Answer:"))
+  print(summary(doe_model))
+}
+
+```
+```{r}
+subset_data2 <- doe[2:144, ] 
+
+for (i in 1:9) {
+  for (j in (i + 1):10) {
+    subset_data2[, 1:10] <- lapply(subset_data2[, 1:10], as.factor)
+    # Two-Factor ANOVA
+    doe_model <- aov(Answer ~ subset_data2[, i+1] + subset_data2[, j+1], data = subset_data2)
+    # Print ANOVA summary
+    print(paste("Two-Factor ANOVA for Factor", i, "and Factor", j, "vs. Answer:"))
+    print(summary(doe_model))
+  }
+}
+
+```
