@@ -354,28 +354,37 @@ To prevent this issue, we inspected for a lower bound for $Q_1, Q_2$
 ```{r}
 c(min(queue_time1),min(queue_time2))
 ```
-And took $-10$ for $Q_1$ and $-40$ for $Q_2$. Indeed, the probability of this random variables reaching a value inferior to this is below 1%:
+And took $-20$ for $Q_1$ and $-50$ for $Q_2$. Indeed, the probabilities of this random variables reaching a value inferior to these are almost $0$ :
 
 ```{r, echo=FALSE}
-print(paste("prob(Q_1 < -10) =", pnorm(-10, sd=4), ", prob(Q_2 < -40) = ", pnorm(-40, sd=17)))
+print(paste("prob(Q_1 < -10) =", pnorm(-20, sd=4), ", prob(Q_2 < -40) = ", pnorm(-80, sd=17)))
 ```
 
 The code for our GPSS model is:
 ```{r, eval=FALSE}
 	GENERATE	44,1,0,1,1	
-	QUEUE	CUA
-	SEIZE 	PC1
-	DEPART 	CUA
-	ADVANCE	(10+NORMAL(1,0,4))		
-	RELEASE 	PC1
-	SEIZE 	PC2
-	ADVANCE	(40+NORMAL(1,0,17))
-	RELEASE	PC2
+	QUEUE	Arrival
+	SEIZE 	Qtime1
+	DEPART 	Arrival
+	ADVANCE	(20+NORMAL(1,0,4))		
+	RELEASE 	Qtime1
+	SEIZE 	Qtime2
+	ADVANCE	(80+NORMAL(1,0,17))
+	RELEASE	Qtime2
 	TERMINATE	1
 
 	START 1
 ```
-Which yields a single 
+Which simulates a queuing process for a single entity, with a termination time:
+$$
+ T = 44 + 20 + Q_1 + 80 + Q_2
+$$
+If we then subtract the values for the lower bounds $20 + 80 = 100$ we can get an approximation for the Answer variable.
+$$
+Answer \simeq T -100
+$$
+
+We did not extend the GPPS model to process several entities,  
 
 ```{r}
 ###Operational Validation###
