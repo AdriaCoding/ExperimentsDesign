@@ -99,11 +99,9 @@ And by the fact that $F2$ does not appear in this formula, we can expect to find
 ## 3. Obtain an expression to generate new data
 In this section we forget our knowledge about the dataset, and wish to develop a linear model for the Answer variable.
 
-#### Correlation Analysis
+### Correlation Analysis
 First, we will look at the correlation between the Answer variable and our Factors.
-```{r}
-library(tidyverse)
-
+```{r, echo=FALSE}
 # Read data from a CSV file, in case we want to use the code for other datasets. 
 data <- read.csv("rngdata.csv")
 
@@ -114,7 +112,7 @@ print(cor_matrix[,11])
 ```
 Factors $F1, F6, F7, F8$ are the most correlated with $Answer$.
 
-#### SLR Analysis
+### SLR Analysis
 Then, we explored simple linear regression (SLR) models for every Factor:
 $$
  Y = \beta_0 + \beta_1 * F_i \quad \quad \forall i\in[1, dots,  10] 
@@ -138,7 +136,7 @@ for (i in 1:10) {
 Factors $F1, F6, F7, F8$ are again shown to be the most relevant, with factor $F6$ having a whopping $R^2 = 0.94$ in its simple LRM. 
 Notably, the SLR models of Factors $F2, F9$ are very poor. For instance, we can not accept that the coefficent for $F9$ is signicant at all, as the $p-value$ is close to $0.2$.
 
-#### MLR model
+### MLR model
 We now see what happens when we build a multiple linear regression (MLR), with all the factors:
 $$
 Y = \beta_0 + \sum_{i=1}^{10} \beta_i * F_i 
@@ -178,12 +176,13 @@ Y = \beta_0 + \beta_1 * F_1 + \beta_2 * F_3 + \beta_3 * F_4 + \beta_4 * F_5
 $$
 
 We shall now test the assumptions of this MLR model, as part of our validation processes (see part 4 of the assignment).
-###### 1-Linearity of the relationship in the data 
+
+##### 1-Linearity of the relationship in the data 
 ```{r}
 # We expect to see an red line close to the horizontal at 0.
 plot(mlr_model, 1)
 ```
-###### 2- Residuals Normally distributed
+##### 2- Residuals Normally distributed
 ```{r}
 # We expect the QQ plot to follow the straight dashed line
 plot(mlr_model, 2)
@@ -193,21 +192,21 @@ plot(mlr_model, 2)
 # Shapiro-Wilks Test, we expect p-value > 0.1 (see R documentation)
 shapiro.test(residuals(mlr_model))
 ```
-###### 3-Homoscedasticity
+##### 3-Homoscedasticity
 
 ```{r}
 # We want all the residuals to have the same finite variance.
 library(lmtest)
 bptest(mlr_model) # We expect p-value > 0.05 (most common significance value)
 ```
-###### 4-Independence of the errors
+#### 4-Independence of the errors
 ```{r}
 # Durbin-Watson test for autocorrelation in the errors.
 # We expect p-value > 0.05 to accept the independence hypothesis.
 dwtest(mlr_model)
 ```
 
-###### 5-Factors are uncorrelated
+#### 5-Factors are uncorrelated
 ```{r}
 # Check the Variance Inflation Factors (VIF)
 # We expect all of them to be close to one.
@@ -217,7 +216,7 @@ vif(mlr_model)
 
 All the tests pass, so we conclude our MLR model is valid.
 
-#### PCA model
+### PCA model
 
 However, we believe that we can build a lighter model, that contains less than 4 input variables.
 To do so, we now perform a principal component analysis (PCA).
@@ -234,7 +233,7 @@ pca_model <- lm(V3 ~ ., data = pca_data)
 summary(pca_model)
 
 ```
-All the test statistics of this model are also very good, so we will prefer this one over the MLR with all the factors because it is lighter. 
+All the test statistics of this model are also very good, so we might prefere to use this one over the MLR because it is lighter. 
 
 Even so, we will now make some tests on this model
 
@@ -243,31 +242,36 @@ Even so, we will now make some tests on this model
 # We expect to see an red line close to the horizontal at 0.
 plot(pca_model, 1)
 ```
-###### 2- Residuals Normally distributed
+
+#### 2- Residuals Normally distributed
 ```{r}
 # We expect the QQ plot to follow the straight dashed line
-plot(pca_model)
+plot(pca_model, 2)
 ```
+
 
 ```{r}
 # Shapiro-Wilks Test, we expect p-value > 0.1 (see R documentation)
-shapiro.test(residuals(pca_model))
+shapiro.test(residuals(pca_model)) #This test actually fails
 ```
-###### 3-Homoscedasticity
+
+#### 3-Homoscedasticity
 
 ```{r}
 # We want all the residuals to have the same finite variance.
 library(lmtest)
 bptest(pca_model) # We expect p-value > 0.05 (most common significance value)
 ```
-###### 4-Independence of the errors
+
+#### 4-Independence of the errors
 ```{r}
 # Durbin-Watson test for autocorrelation in the errors.
 # We expect p-value > 0.05 to accept the independence hypothesis.
 dwtest(pca_model)
 ```
 
-###### 5-Factors are uncorrelated
+
+#### 5-Factors are uncorrelated
 ```{r}
 # Check the Variance Inflation Factors (VIF)
 #
@@ -276,25 +280,103 @@ dwtest(pca_model)
 library(car)
 vif(pca_model)
 ```
+For this model, we see that one of the assumptions is not holding:
+ **The residuals are not normally distributed!**
+The failure of this assumption is not a sufficient condition for discarding the model. Even so, we have to be aware of it, as it usually leads to an overestimation of a model's performance statistics.
 
-
+### MLR vs PCA discussion
+Let us now make a thorough investigation on the residuals for both models: 
 
 ```{r}
+x <- seq(min(pca_model$residuals), max(pca_model$residuals), length=40)
+curve <- dnorm(x, 0, sd(pca_model$residuals))
 
+{
+hist(x = pca_model$residuals, freq=FALSE, breaks=20,
+     main ="Residuals Histogram for PCA model")
+lines(x = x, y= curve, col = "red")
+lines(x = density(x = pca_model$residuals), col= "blue")
+}
+```
+```{r}
+x <- seq(min(mlr_model$residuals), max(mlr_model$residuals), length=40)
+curve <- dnorm(x, 0, sd(mlr_model$residuals))
+
+{
+hist(x = mlr_model$residuals, freq=FALSE, breaks=20,
+     main ="Residuals Histogram for MLR model")
+lines(x = x, y= curve, col = "red")
+lines(x = density(x = mlr_model$residuals), col= "blue")
+}
+```
+
+In the above plots, we see <span style="color:blue"> a normal distribution</span> fitting the residuals vs the <span style="color:red"> an empirical distribution</span> obtained form the histogram. We see that both pairs of lines are quite similar, with the main difference being that the residuals form the PCA model are wider. 
+
+If we look at the empirical standard deviation of the residuals, we see that the PCA model's is four times larger than MLR model's:
+```{r, echo=FALSE}
+print(paste("Standard deviation of errors in PCA model: ",sd(pca_model$residuals)))
+print(paste("Standard deviation of errors in MLR model: ",sd(mlr_model$residuals)))
+```
+This makes us conclude that the PCA model is inferior to the MLR. Is is quite possible that the failure of the second assumption led to an overestimation of the performance statistics for the PCA model. Thus, in a real situation we will be choosing the MLR model.
+
+However, if we remember the way we defined our data, we realize that the standard deviation of the MLR is so close to one because it accounts for the random noise $Z \sim N(0,1)$. The MLR is the perfect model to represent our data, and as such, it is not very interesting.
+
+In the end, we decided to stick to the PCA model for fun. It will allow us to reach more interesting conclusions in the third part, as it uses information from all the factors, and it will also be the lighter for the Simulation part, as we need only simulate values for the first two principal components. Still, we have to be aware that the performance is worse than we initially expected.
+
+### Queue Simulation Model
+For this part we ran a queuing simulation model on GPSS. Looking back at the linear expression for our PCA model: 
+$$
+ Y = \beta_0 + \beta_1 * PC_1 + \beta_2 * PC_2
+$$
+The intercept $\beta_0\simeq 44$ is to be interpreted as the arrival time, the principal components times their coefficients, $Q_1 = \beta_1 * PC_1 $ and $Q_2 =  \beta_2 * PC_2$, are to be interpreted as two succeeding queuing times, and the Answer variable predictor $Y$ is the final exit time.
+
+The first thing we need to do is decide how to parametrize the queuing times by inspecting the data of our model:
+```{r}
 queue_time1 <- pca_model$coefficients[2]*pca_data$PC1
-mean(queue_time1)
-min(queue_time1)
-sd(queue_time1)
-pca_model$coefficients[3]
 queue_time2 <- pca_model$coefficients[3]*pca_data$PC2
-mean(queue_time2)
-min(queue_time2)
-sd(queue_time2)
 ```
 
-```{r}
-hist(data$Answer)
+```{r, echo=FALSE}
+hist(queue_time1)
+print(paste("Queue 1: mean=",mean(queue_time1)," sd=", sd(queue_time1)))
+
+hist(queue_time2)
+print(paste("Queue 2: mean=",mean(queue_time2)," sd=", sd(queue_time2)))
 ```
+We decided to paremetrize them as normal distributions:
+$$
+Q_1 \sim N(0, 4) \quad Q_2 \sim N(0, 17)
+$$
+
+However, these $Q_1, Q_2$ can take negative values, which we feared may raise an exception in GPSS as there is no clear interpretation of what "negative time" is. 
+
+To prevent this issue, we inspected for a lower bound for $Q_1, Q_2$
+```{r}
+c(min(queue_time1),min(queue_time2))
+```
+And took $-10$ for $Q_1$ and $-40$ for $Q_2$. Indeed, the probability of this random variables reaching a value inferior to this is below 1%:
+
+```{r, echo=FALSE}
+print(paste("prob(Q_1 < -10) =", pnorm(-10, sd=4), ", prob(Q_2 < -40) = ", pnorm(-40, sd=17)))
+```
+
+The code for our GPSS model is:
+```{r, eval=FALSE}
+	GENERATE	44,1,0,1,1	
+	QUEUE	CUA
+	SEIZE 	PC1
+	DEPART 	CUA
+	ADVANCE	(10+NORMAL(1,0,4))		
+	RELEASE 	PC1
+	SEIZE 	PC2
+	ADVANCE	(40+NORMAL(1,0,17))
+	RELEASE	PC2
+	TERMINATE	1
+
+	START 1
+```
+Which yields a single 
+
 ```{r}
 ###Operational Validation###
 n <- nrow(pca_data)
