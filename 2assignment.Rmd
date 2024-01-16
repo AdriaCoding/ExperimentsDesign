@@ -1,24 +1,32 @@
 ---
 title: "SMDE: Second Assignment"
-author: "Adrià Lisa"
+author: "Adrià Lisa and Xi Chen"
 date: "2023-12-22"
 output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
 ```
 
-
 ## 1. Defining our own RNG
-We define a function to define $n$ pseudo-random numbers between $[0,1)$ with a given *seed*, for reproducibility.
-A congruential generator was used, with the following hyperparameters:
 
-* Module $m = 2^32$.
-* Multiplicative factor $a = 4 \cdot 777 + 1$.
-* Additive factor $c = 50033$.
+We define a function to define $n$ pseudo-random numbers between $[0,1)$
+with a given *seed*, for reproducibility. A congruential generator was
+used, with the following hyperparameters:
 
-A list of RN is generated via the recurrence $Z_i = a Z_{i-1} + c \,\, (mod \,m)$, where $Z_0$ is the value of the *seed*, set by default to the prime number $26107$.
+-   Module $m = 2^32$.
+-   Multiplicative factor $a = 4 \cdot 777 + 1$.
+-   Additive factor $c = 50033$.
+
+A list of RN is generated via the recurrence
+$Z_i = a Z_{i-1} + c \,\, (mod \,m)$, where $Z_0$ is the value of the
+*seed*, set by default to the prime number $26107$.
+
 ```{r}
 My_RNG <- function (n, seed=26107) {
   #Congruent mixt sequence of numbers (best if c and Z0 are prime)
@@ -31,9 +39,14 @@ My_RNG <- function (n, seed=26107) {
   return(R)
 }
 ```
-Our teacher (Pau Fonseca) explained in class that although it is not mathematically proven, it has been empirically observed that choosing the seed to be a prime number often leads to better results.
 
-As part of our validation process, we tested our RNG with different empirical tests from the ```{r} randtests``` library, obtaining a reasonably high confidence in the hypothesis of "randomness".
+Our teacher (Pau Fonseca) explained in class that although it is not
+mathematically proven, it has been empirically observed that choosing
+the seed to be a prime number often leads to better results.
+
+As part of our validation process, we tested our RNG with different
+empirical tests from the `{r} randtests` library, obtaining a reasonably
+high confidence in the hypothesis of "randomness".
 
 ```{r}
 R = My_RNG(10000)
@@ -44,10 +57,14 @@ cox.stuart.test(R)
 difference.sign.test(R)
 rank.test(R)
 ```
-## 2. Simulating our data
-We created a table of numeric data, using R's standard RNG, and save it in the file "rngdata.csv".
 
-The first 5 factors in our dataset are just random numbers with a uniform distribution, $F_1,F_2, F_3, F_4, F_5 \sim U(0,10)$.
+## 2. Simulating our data
+
+We created a table of numeric data, using R's standard RNG, and save it
+in the file "rngdata.csv".
+
+The first 5 factors in our dataset are just random numbers with a
+uniform distribution, $F_1,F_2, F_3, F_4, F_5 \sim U(0,10)$.
 
 ```{r}
 # Set seed for reproducibility
@@ -67,12 +84,11 @@ for (i in 1:5) {
 }
 
 ```
+
 The last 5 factors are linear combinations of the previous ones, namely:
- * $F_6 = 6F_1 + F_3$
- * $F_7 = F_1 + F_2 + F_3 + F_4 + F_5$
- * $F_8 = F_1 - F_5$
- * $F_9 = 3F_3 - 2 F_4$
- * $F_{10} = -7F_2 - 5 F_4$
+\* $F_6 = 6F_1 + F_3$ \* $F_7 = F_1 + F_2 + F_3 + F_4 + F_5$ \*
+$F_8 = F_1 - F_5$ \* $F_9 = 3F_3 - 2 F_4$ \* $F_{10} = -7F_2 - 5 F_4$
+
 ```{r}
 
 # Define linear functions for Factor 6 to 10
@@ -83,24 +99,35 @@ data$Factor8 <- data$Factor1 - data$Factor5
 data$Factor9 <- 3*data$Factor3 - 2*data$Factor4
 data$Factor10 <- -7*data$Factor2 - 5*data$Factor4
 ```
-Finally, an Answer variable is defined as the sum of factors $F_4, F_5, F_6$ + a random noise $Z \sim N(0,1)$.
+
+Finally, an Answer variable is defined as the sum of factors
+$F_4, F_5, F_6$ + a random noise $Z \sim N(0,1)$.
+
 ```{r}
 # Answer variable is just the sum of all factors + noise
 data$Answer <- rowSums(data[,4:6]) + rnorm(num_individuals)
 write.csv(data, "rngdata.csv", row.names = FALSE)
 ```
-With this definitions, one can see that in actuality, we have a formula for the Answer variable using only independent Factors:
+
+With this definitions, one can see that in actuality, we have a formula
+for the Answer variable using only independent Factors: 
 $$
 Answer = 6*F_1 + F_3 + F_4 + F_5 + Z
 $$
-And by the fact that $F_2$ does not appear in this formula, we can expect to find that it will not be a useful factor when we try to predict the Answer variable.
-
+And by the fact that $F_2$ does not appear in this formula, we can
+expect to find that it will not be a useful factor when we try to
+predict the Answer variable.
 
 ## 3. Obtain an expression to generate new data
-In this section we forget our knowledge about the dataset, and wish to develop a linear model for the Answer variable.
 
-### Correlation Analysis
-First, we will look at the correlation between the Answer variable and our Factors.
+In this section we forget our knowledge about the dataset, and wish to
+develop a linear model for the Answer variable.
+
+### 3.1. Correlation Analysis
+
+First, we will look at the correlation between the Answer variable and
+our Factors.
+
 ```{r, echo=FALSE}
 # Read data from a CSV file, in case we want to use the code for other datasets. 
 data <- read.csv("rngdata.csv")
@@ -110,17 +137,21 @@ cor_matrix <- cor(data)
 print(cor_matrix[,11])
 
 ```
+
 Factors $F1, F6, F7, F8$ are the most correlated with $Answer$.
 
-### SLR Analysis
-Then, we explored simple linear regression (SLR) models for every Factor:
+### 3.2. SLR Analysis
+
+Then, we explored simple linear regression (SLR) models for every
+Factor:
 $$
  Y = \beta_0 + \beta_1 * F_i \quad \quad \forall i\in[1, dots,  10] 
-$$
-From all the information we can get from a linear model, we are only interested in two things:
- * The $R^2$ values, which account for the ability of the linear model to explain the variability of the data.
- * The $p$-value of the significance for $\beta_i$, that is, $Prob(\beta_1 \neq 0)$.
-
+$$ 
+From all the information we can get from a linear model, we are only
+interested in two things: \* The $R^2$ values, which account for the
+ability of the linear model to explain the variability of the data. \*
+The $p$-value of the significance for $\beta_i$, that is,
+$Prob(\beta_1 \neq 0)$.
 
 ```{r}
 lm_list <- vector("list", length = 10)
@@ -133,24 +164,37 @@ for (i in 1:10) {
               ", t test p-value =", model_summary$coefficients[2,4]))
 }
 ```
-Factors $F_1, F_6, F_7, F_8$ are again shown to be the most relevant, with factor $F_6$ having a whopping $R^2 = 0.94$ in its simple LRM. 
-Notably, the SLR models of Factors $F_2, F_9$ are very poor. For instance, we can not accept that the coefficent for $F_9$ is signicant at all, as the $p-value$ is close to $0.2$.
 
-### MLR model
-We now see what happens when we build a multiple linear regression (MLR), with all the factors:
+Factors $F_1, F_6, F_7, F_8$ are again shown to be the most relevant,
+with factor $F_6$ having a whopping $R^2 = 0.94$ in its simple LRM.
+Notably, the SLR models of Factors $F_2, F_9$ are very poor. For
+instance, we can not accept that the coefficent for $F_9$ is signicant
+at all, as the $p-value$ is close to $0.2$.
+
+### 3.3. MLR model
+
+We now see what happens when we build a multiple linear regression
+(MLR), with all the factors: 
 $$
 Y = \beta_0 + \sum_{i=1}^{10} \beta_i * F_i 
 $$
+
 ```{r}
 # Initial Multiple linear regression model
 first_mlr_model <- lm(Answer ~ ., data = data)
 summary(first_mlr_model)
 ```
-Factors $F_6, \dots, F_{10}$ are automatically discarded. This is not surprising as we now that they are actually linearly dependant on the first Factors $F_1, \dots, F_5$. 
 
-We can see that factor $F_2$ has a very small and insignificant coefficient $\beta_2 \simeq 0$, so we may just as well exclude it from the model.
+Factors $F_6, \dots, F_{10}$ are automatically discarded. This is not
+surprising as we now that they are actually linearly dependant on the
+first Factors $F_1, \dots, F_5$.
 
-To be completely sure about the correctness of removing $F_2$, we can also conduct a partial F-test:
+We can see that factor $F_2$ has a very small and insignificant
+coefficient $\beta_2 \simeq 0$, so we may just as well exclude it from
+the model.
+
+To be completely sure about the correctness of removing $F_2$, we can
+also conduct a partial F-test:
 
 ```{r}
 # Final Multiple linear regression model
@@ -169,20 +213,25 @@ if (p_value < 0.05) {
   print("Factor2 should not be removed from the model")
 }
 ```
+
 The final MLR model has this shape:
 
 $$
 Y = \beta_0 + \beta_1 * F_1 + \beta_2 * F_3 + \beta_3 * F_4 + \beta_4 * F_5
 $$
 
-We shall now test the assumptions of this MLR model, as part of our validation processes (see part 4 of the assignment).
+We shall now test the assumptions of this MLR model, as part of our
+validation processes (see part 4 of the assignment).
 
-##### 1-Linearity of the relationship in the data 
+##### 3.3.1-Linearity of the relationship in the data
+
 ```{r}
 # We expect to see an red line close to the horizontal at 0.
 plot(mlr_model, 1)
 ```
-##### 2- Residuals Normally distributed
+
+##### 3.3.2- Residuals Normally distributed
+
 ```{r}
 # We expect the QQ plot to follow the straight dashed line
 plot(mlr_model, 2)
@@ -192,21 +241,25 @@ plot(mlr_model, 2)
 # Shapiro-Wilks Test, we expect p-value > 0.1 (see R documentation)
 shapiro.test(residuals(mlr_model))
 ```
-##### 3-Homoscedasticity
+
+##### 3.3.3-Homoscedasticity
 
 ```{r}
 # We want all the residuals to have the same finite variance.
 library(lmtest)
 bptest(mlr_model) # We expect p-value > 0.05 (most common significance value)
 ```
-#### 4-Independence of the errors
+
+#### 3.3.4-Independence of the errors
+
 ```{r}
 # Durbin-Watson test for autocorrelation in the errors.
 # We expect p-value > 0.05 to accept the independence hypothesis.
 dwtest(mlr_model)
 ```
 
-#### 5-Factors are uncorrelated
+#### 3.3.5-Factors are uncorrelated
+
 ```{r}
 # Check the Variance Inflation Factors (VIF)
 # We expect all of them to be close to one.
@@ -216,46 +269,52 @@ vif(mlr_model)
 
 All the tests pass, so we conclude our MLR model is valid.
 
-### PCA model
+### 3.4. PCA model
 
-However, we believe that we can build a lighter model, that contains less than 4 input variables.
-To do so, we now perform a principal component analysis (PCA).
+However, we believe that we can build a lighter model, that contains
+less than 4 input variables. To do so, we now perform a principal
+component analysis (PCA).
 
 ```{r}
 pca<-prcomp(data[, -ncol(data)])
 summary(pca)
 ```
 
-Since we can achive 88% explainablity for the variance by just taking the first 2 components, we will build a linear model from PC1 and PC2. 
+Since we can achive 88% explainablity for the variance by just taking
+the first 2 components, we will build a linear model from PC1 and PC2.
+
 ```{r}
 pca_data <- as.data.frame(cbind(pca$x[,1:2], data$Answer))
 pca_model <- lm(V3 ~ ., data = pca_data)
 summary(pca_model)
 
 ```
-All the test statistics of this model are also very good, so we might prefere to use this one over the MLR because it is lighter. 
+
+All the test statistics of this model are also very good, so we might
+prefere to use this one over the MLR because it is lighter.
 
 Even so, we will now make some tests on this model
 
-##### 1-Linearity of the relationship in the data 
+##### 3.4.1-Linearity of the relationship in the data
+
 ```{r}
 # We expect to see an red line close to the horizontal at 0.
 plot(pca_model, 1)
 ```
 
-#### 2- Residuals Normally distributed
+#### 3.4.2- Residuals Normally distributed
+
 ```{r}
 # We expect the QQ plot to follow the straight dashed line
 plot(pca_model, 2)
 ```
-
 
 ```{r}
 # Shapiro-Wilks Test, we expect p-value > 0.1 (see R documentation)
 shapiro.test(residuals(pca_model)) #This test actually fails
 ```
 
-#### 3-Homoscedasticity
+#### 3.4.3-Homoscedasticity
 
 ```{r}
 # We want all the residuals to have the same finite variance.
@@ -263,15 +322,16 @@ library(lmtest)
 bptest(pca_model) # We expect p-value > 0.05 (most common significance value)
 ```
 
-#### 4-Independence of the errors
+#### 3.4.4-Independence of the errors
+
 ```{r}
 # Durbin-Watson test for autocorrelation in the errors.
 # We expect p-value > 0.05 to accept the independence hypothesis.
 dwtest(pca_model)
 ```
 
+#### 3.4.5-Factors are uncorrelated
 
-#### 5-Factors are uncorrelated
 ```{r}
 # Check the Variance Inflation Factors (VIF)
 #
@@ -280,12 +340,17 @@ dwtest(pca_model)
 library(car)
 vif(pca_model)
 ```
-For this model, we see that one of the assumptions is not holding:
- **The residuals are not normally distributed!**
-The failure of this assumption is not a sufficient condition for discarding the model. Even so, we have to be aware of it, as it usually leads to an overestimation of a model's performance statistics.
 
-### MLR vs PCA discussion
-Let us now make a thorough investigation on the residuals for both models: 
+For this model, we see that one of the assumptions is not holding: **The
+residuals are not normally distributed!** The failure of this assumption
+is not a sufficient condition for discarding the model. Even so, we have
+to be aware of it, as it usually leads to an overestimation of a model's
+performance statistics.
+
+### 3.5. MLR vs PCA discussion
+
+Let us now make a thorough investigation on the residuals for both
+models:
 
 ```{r}
 x <- seq(min(pca_model$residuals), max(pca_model$residuals), length=40)
@@ -298,6 +363,7 @@ lines(x = x, y= curve, col = "red")
 lines(x = density(x = pca_model$residuals), col= "blue")
 }
 ```
+
 ```{r}
 x <- seq(min(mlr_model$residuals), max(mlr_model$residuals), length=40)
 curve <- dnorm(x, 0, sd(mlr_model$residuals))
@@ -310,22 +376,46 @@ lines(x = density(x = mlr_model$residuals), col= "blue")
 }
 ```
 
-In the above plots, we see <span style="color:blue"> a normal distribution</span> fitting the residuals vs the <span style="color:red"> an empirical distribution</span> obtained form the histogram. We see that both pairs of lines are quite similar, with the main difference being that the residuals form the PCA model are wider. 
+In the above plots, we see [ a normal distribution]{style="color:blue"}
+fitting the residuals vs the [ an empirical
+distribution]{style="color:red"} obtained form the histogram. We see
+that both pairs of lines are quite similar, with the main difference
+being that the residuals form the PCA model are wider.
 
-If we look at the empirical standard deviation of the residuals, we see that the PCA model's is four times larger than MLR model's:
+If we look at the empirical standard deviation of the residuals, we see
+that the PCA model's is four times larger than MLR model's:
+
 ```{r, echo=FALSE}
 print(paste("Standard deviation of errors in PCA model: ",sd(pca_model$residuals)))
 print(paste("Standard deviation of errors in MLR model: ",sd(mlr_model$residuals)))
 ```
-This makes us conclude that the PCA model is inferior to the MLR. Is is quite possible that the failure of the second assumption led to an overestimation of the performance statistics for the PCA model. Thus, in a real situation we will be choosing the MLR model.
 
-However, if we remember the way we defined our data, we realize that the standard deviation of the MLR is so close to one because it accounts for the random noise $Z \sim N(0,1)$. The MLR is the perfect model to represent our data, and as such, it is not very interesting.
+This makes us conclude that the PCA model is inferior to the MLR. Is is
+quite possible that the failure of the second assumption led to an
+overestimation of the performance statistics for the PCA model. Thus, in
+a real situation we will be choosing the MLR model.
 
-In the end, we decided to stick to the PCA model for fun. It will allow us to reach more interesting conclusions in the third part, as it uses information from all the factors, and it will also be the lighter for the Simulation part, as we need only simulate values for the first two principal components. Still, we have to be aware that the performance is worse than we initially expected.
+However, if we remember the way we defined our data, we realize that the
+standard deviation of the MLR is so close to one because it accounts for
+the random noise $Z \sim N(0,1)$. The MLR is the perfect model to
+represent our data, and as such, it is not very interesting.
 
-### Operational Validation
-As part of our final validation processes, we conducted a test to ensure that our model is actually useful to predict the Answer variable.
-To do that, we separated the dataset into a train sample with $67\%$ of the entries and trained a new pca_model. We then used that model on the remaining $33\%$ of the data (test data) and computed the squared root of the mean squared error between the true values for the answer variable.
+In the end, we decided to stick to the PCA model for fun. It will allow
+us to reach more interesting conclusions in the third part, as it uses
+information from all the factors, and it will also be the lighter for
+the Simulation part, as we need only simulate values for the first two
+principal components. Still, we have to be aware that the performance is
+worse than we initially expected.
+
+### 3.6. Operational Validation
+
+As part of our final validation processes, we conducted a test to ensure
+that our model is actually useful to predict the Answer variable. To do
+that, we separated the dataset into a train sample with $67\%$ of the
+entries and trained a new pca_model. We then used that model on the
+remaining $33\%$ of the data (test data) and computed the squared root
+of the mean squared error between the true values for the answer
+variable.
 
 ```{r}
 n <- nrow(data)
@@ -351,16 +441,27 @@ test_RMSE<-sqrt(mean((test_data$Answer-yhat[,1])^2)/(nrow(test_data)))
 test_RMSE
 
 ```
-The code above is not deterministic, as every time it collects a different randomized sample from the data. In all the trials we did, we never got an error above $0.7$ which is fairly good.
 
-### Queue Simulation Model
-For this part we ran a queuing simulation model on GPSS. Looking back at the linear expression for our PCA model: 
+The code above is not deterministic, as every time it collects a
+different randomized sample from the data. In all the trials we did, we
+never got an error above $0.7$ which is fairly good.
+
+### 3.7. Queue Simulation Model
+
+For this part we ran a queuing simulation model on GPSS. Looking back at
+the linear expression for our PCA model: 
 $$
  Y = \beta_0 + \beta_1 * PC_1 + \beta_2 * PC_2
-$$
-The intercept $\beta_0\simeq 44$ is to be interpreted as the arrival time, the principal components times their coefficients, $Q_1 = \beta_1 * PC_1 $ and $Q_2 =  \beta_2 * PC_2$, are to be interpreted as two succeeding queuing times, and the Answer variable predictor $Y$ is the final exit time.
+$$ 
+The intercept $\beta_0\simeq 44$ is to be interpreted as the arrival
+time, the principal components times their coefficients, \$Q_1 =
+\beta\_1 \* PC_1 \$ and $Q_2 = \beta_2 * PC_2$, are to be interpreted as
+two succeeding queuing times, and the Answer variable predictor $Y$ is
+the final exit time.
 
-The first thing we need to do is decide how to parametrize the queuing times by inspecting the data of our model:
+The first thing we need to do is decide how to parametrize the queuing
+times by inspecting the data of our model:
+
 ```{r}
 queue_time1 <- pca_model$coefficients[2]*pca_data$PC1
 queue_time2 <- pca_model$coefficients[3]*pca_data$PC2
@@ -373,24 +474,32 @@ print(paste("Queue 1: mean=",mean(queue_time1)," sd=", sd(queue_time1)))
 hist(queue_time2)
 print(paste("Queue 2: mean=",mean(queue_time2)," sd=", sd(queue_time2)))
 ```
-We decided to paremetrize them as normal distributions:
+
+We decided to paremetrize them as normal distributions: 
 $$
 Q_1 \sim N(0, 4) \quad Q_2 \sim N(0, 17)
 $$
 
-However, these $Q_1, Q_2$ can take negative values, which we feared may raise an exception in GPSS as there is no clear interpretation of what "negative time" is. 
+However, these $Q_1, Q_2$ can take negative values, which we feared may
+raise an exception in GPSS as there is no clear interpretation of what
+"negative time" is.
 
 To prevent this issue, we inspected for a lower bound for $Q_1, Q_2$
+
 ```{r}
 c(min(queue_time1),min(queue_time2))
 ```
-And took $-20$ for $Q_1$ and $-50$ for $Q_2$. Indeed, the probabilities of this random variables reaching a value inferior to these are almost $0$ :
+
+And took $-20$ for $Q_1$ and $-50$ for $Q_2$. Indeed, the probabilities
+of this random variables reaching a value inferior to these are almost
+$0$ :
 
 ```{r, echo=FALSE}
 print(paste("prob(Q_1 < -10) =", pnorm(-20, sd=4), ", prob(Q_2 < -40) = ", pnorm(-80, sd=17)))
 ```
 
 The code for our GPSS model is:
+
 ```{r, eval=FALSE}
 	GENERATE	44,1,0,1,1	
 	QUEUE	Arrival
@@ -405,27 +514,34 @@ The code for our GPSS model is:
 
 	START 1
 ```
-Which simulates a queuing process for a single entity, with a termination time:
+
+Which simulates a queuing process for a single entity, with a
+termination time:
 $$
  T = 44 + 20 + Q_1 + 80 + Q_2
-$$
-If we then subtract the values for the lower bounds $20 + 80 = 100$ we can get an approximation for the Answer variable.
+$$ 
+If we then subtract the values for the lower bounds $20 + 80 = 100$
+we can get an approximation for the Answer variable. 
+
 $$
 Answer \simeq T -100
 $$
 
-We did not extend the GPPS model to process several entities, as we did not use it any further.
+We did not extend the GPPS model to process several entities, as we did
+not use it any further.
 
 
+## 4.DoE
 
-## 3. Design of Experiments
+We conducted a $2^k$ factorial design using the minimum and maximum values for each variable to detect the effects and the interactions of the $10$ factors. The design is a combination of all possible values for each factor and find the best value, which is the minimal value in our experiment.
 
-We conducted a factorial 
+We used Yates' algorithm for randomizing the order of runs in the experimental design. For instance, a value with a single "+" in the "Factor1" column is representing the principal effect of $Factor_1$. And a row with two "+" on "Factor1" and "Factor2" corresponds to the interaction of $Factor_1 * Factor_2$", etc.
+
 ```{r}
 data_min <- apply(data, 2, min)
-  data_max <- apply(data, 2, max)
+data_max <- apply(data, 2, max)
   
-  factorial_design <- expand.grid(Factor1 = c(data_min[1], data_max[1]),
+factorial_design <- expand.grid(Factor1 = c(data_min[1], data_max[1]),
                                   Factor2 = c(data_min[2], data_max[2]),
                                   Factor3 = c(data_min[3], data_max[3]),
                                   Factor4 = c(data_min[4], data_max[4]),
@@ -435,32 +551,54 @@ data_min <- apply(data, 2, min)
                                   Factor8 = c(data_min[8], data_max[8]),
                                   Factor9 = c(data_min[9], data_max[9]),
                                   Factor10 = c(data_min[10], data_max[10]))
-  get_answer <- function(row){
+get_answer <- function(row){
       pca_factors <- pca$rotation %*% unlist(row)
       answer = pca_model$coefficients %*% c(1,pca_factors[c(1,2)]) 
       return(answer)
   }
-  predictions <- apply(factorial_design, 1, get_answer)
-  mp <- c('-', '+')
-  fnames <- list(Factor1 = mp, Factor2 = mp , Factor3 = mp, Factor4 = mp, Factor5 = mp,
-                 Factor6 = mp, Factor7 = mp , Factor8 = mp, Factor9 = mp, Factor10 = mp)
-  library(dae)
-  treats <-fac.gen(generate = fnames,order='yates')
-  y <- apply(factorial_design, 1, get_answer)
-  
-  
-  treats <- data.frame(treats)
-  treats$Y <- c(y)
-  treats[1:10,]
+predictions <- apply(factorial_design, 1, get_answer)
+mp <- c('-', '+')
+fnames <- list(Factor1 = mp, Factor2 = mp , Factor3 = mp, Factor4 = mp,
+               Factor5 = mp, Factor6 = mp, Factor7 = mp , Factor8 = mp,
+               Factor9 = mp, Factor10 = mp)
+library(dae)
+treats <-fac.gen(generate = fnames,order='yates')
+y <- apply(factorial_design, 1, get_answer)
+treats <- data.frame(treats)
+treats$Y <- c(y)
+treats[1:10,]
 ```
 
 
 ```{r}
-aov.res <-aov(y~Factor1*Factor2*Factor3*Factor4*Factor5*Factor6*Factor7*Factor8*Factor9*Factor10,treats)
-  yates<- yates.effects(aov.res, data = treats)
-  # Only print the effects that are not so close to zero
+aov.res <-aov(y~Factor1*Factor2*Factor3*Factor4*Factor5*
+                Factor6*Factor7*Factor8*Factor9*Factor10,treats)
+yates<- yates.effects(aov.res, data = treats)
+# Only print the effects that are not so close to zero
   for (i in 1:length(yates)){
-    if (abs(yates[i]) > 0.1) print(yates[i])
+    if (abs(yates[i]) > 0.1) {
+      print(paste("Effect of", names(yates[i]), "-> ", yates[i]))
+    }
   }
+  
 ```
-## 4. Validation
+
+From the result ,we got the most effective Factor is "Factor6" ($20.61508$) & "Factor7" ($-13.72242$) & "Factor8" ($-11.57796$) & "Factor9" ($-14.95543$) & "Factor10" ($-13.54805$), besides, there is no interaction between each factor.
+
+This is very interesting, as the MLR model discarded all of this factors. Our interpretation of why this is the case is because of the coefficients of the PCA's rotation matrix, which has very high coefficients for the most effective factors:
+
+```{r}
+t(pca$rotation[,1:2])
+```
+
+We assume the reason why there is no interaction between among these 10 factors is because the formula we used to compute the Answer variable is linear. So, there was no real interaction between the factors, ans the analysis reflects that.
+
+## 5. Validation
+As for the validation and verification of our models, it is something we already did along the way.
+We performed several tests on our RNG, MLR model and PCA model, that can be considered *conceptual model validations*.
+Surprisingly, we saw that the PCA model failed one of the assumptions for a linear model, but still, we decided to keep using it as that fact was not relevant for our porposes.
+
+We also performed some *operational validation* to test if our PCA model was good for predicting new data for the answer variable. We concluded that so was the case, with an average error of $0.7$. 
+It is quite possible that this metric would have been improved by the MLR model. But as we commented along section 3, in the end we just chose the PCA model because we felt was more interesting.
+
+We may also comment that there are many other validation processes we have done along the way, without writing them down in this report. For instance, we were constantly doing a verification that our code worked as intended, mainly via the RStudio console.
