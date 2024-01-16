@@ -93,7 +93,7 @@ With this definitions, one can see that in actuality, we have a formula for the 
 $$
 Answer = 6*F_1 + F_3 + F_4 + F_5 + Z
 $$
-And by the fact that $F2$ does not appear in this formula, we can expect to find that it will not be a useful factor when we try to predict the Answer variable.
+And by the fact that $F_2$ does not appear in this formula, we can expect to find that it will not be a useful factor when we try to predict the Answer variable.
 
 
 ## 3. Obtain an expression to generate new data
@@ -133,8 +133,8 @@ for (i in 1:10) {
               ", t test p-value =", model_summary$coefficients[2,4]))
 }
 ```
-Factors $F1, F6, F7, F8$ are again shown to be the most relevant, with factor $F6$ having a whopping $R^2 = 0.94$ in its simple LRM. 
-Notably, the SLR models of Factors $F2, F9$ are very poor. For instance, we can not accept that the coefficent for $F9$ is signicant at all, as the $p-value$ is close to $0.2$.
+Factors $F_1, F_6, F_7, F_8$ are again shown to be the most relevant, with factor $F_6$ having a whopping $R^2 = 0.94$ in its simple LRM. 
+Notably, the SLR models of Factors $F_2, F_9$ are very poor. For instance, we can not accept that the coefficent for $F_9$ is signicant at all, as the $p-value$ is close to $0.2$.
 
 ### MLR model
 We now see what happens when we build a multiple linear regression (MLR), with all the factors:
@@ -146,11 +146,11 @@ $$
 first_mlr_model <- lm(Answer ~ ., data = data)
 summary(first_mlr_model)
 ```
-Factors $F6, \dots, F10$ are automatically discarded. This is not surprising as we now that they are actually linearly dependant on the first Factors $F1, \dots, F5$. 
+Factors $F_6, \dots, F_{10}$ are automatically discarded. This is not surprising as we now that they are actually linearly dependant on the first Factors $F_1, \dots, F_5$. 
 
-We can see that factor $F2$ has a very small and insignificant coefficient $\beta_2 \simeq 0$, so we may just as well exclude it from the model.
+We can see that factor $F_2$ has a very small and insignificant coefficient $\beta_2 \simeq 0$, so we may just as well exclude it from the model.
 
-To be completely sure about the correctness of removing $F2$, we can also conduct a partial F-test:
+To be completely sure about the correctness of removing $F_2$, we can also conduct a partial F-test:
 
 ```{r}
 # Final Multiple linear regression model
@@ -323,6 +323,36 @@ However, if we remember the way we defined our data, we realize that the standar
 
 In the end, we decided to stick to the PCA model for fun. It will allow us to reach more interesting conclusions in the third part, as it uses information from all the factors, and it will also be the lighter for the Simulation part, as we need only simulate values for the first two principal components. Still, we have to be aware that the performance is worse than we initially expected.
 
+### Operational Validation
+As part of our final validation processes, we conducted a test to ensure that our model is actually useful to predict the Answer variable.
+To do that, we separated the dataset into a train sample with $67\%$ of the entries and trained a new pca_model. We then used that model on the remaining $33\%$ of the data (test data) and computed the squared root of the mean squared error between the true values for the answer variable.
+
+```{r}
+n <- nrow(data)
+data.sample1 <- sample(1:n, round(0.67*n))
+train_data <- data[data.sample1, ] 
+test_data <- data[-data.sample1, ] 
+
+train_pca<-prcomp(train_data[, -ncol(train_data)])
+train_pca_data <- as.data.frame(cbind(pca$x[,1:2], train_data$Answer))
+train_pca_model <- lm(V3 ~ ., data = train_pca_data)
+
+factors2pca <- function(row){
+      return(train_pca$rotation %*% row)
+}
+test_pca_data <- apply(test_data[-11], 1, factors2pca)[1:2,]
+test_pca_data <- as.data.frame(t(test_pca_data))
+names(test_pca_data) <- c("PC1", "PC2")
+yhat<-predict(train_pca_model, test_pca_data, interval="prediction")
+
+### Root Mean Square Error ###
+
+test_RMSE<-sqrt(mean((test_data$Answer-yhat[,1])^2)/(nrow(test_data)))
+test_RMSE
+
+```
+The code above is not deterministic, as every time it collects a different randomized sample from the data. In all the trials we did, we never got an error above $0.7$ which is fairly good.
+
 ### Queue Simulation Model
 For this part we ran a queuing simulation model on GPSS. Looking back at the linear expression for our PCA model: 
 $$
@@ -384,136 +414,53 @@ $$
 Answer \simeq T -100
 $$
 
-We did not extend the GPPS model to process several entities,  
+We did not extend the GPPS model to process several entities, as we did not use it any further.
 
+
+
+## 3. Design of Experiments
+
+We conducted a factorial 
 ```{r}
-###Operational Validation###
-n <- nrow(pca_data)
-data.sample1 <- sample(1:n, round(0.67*n))
-data.set1 <- pca_data[data.sample1, ] 
-test.set1 <- pca_data[-data.sample1, ] 
-data.model1 <- pca_model
-
-yhat<-predict(data.model1, data.set1, interval="prediction")
-yhat
-
-y<-test.set1$Answer
-
-error<-cbind(yhat[,1,drop=FALSE],y,(y-yhat[,1])^2)
-sqr_err<-error[,1]
-mse<-mean(sqr_err)
-
-### Root Mean Square Error ###
-RMSE1<-sqrt(mse/(nrow(test.set1)))
-RMSE1
-
-names(data.model1)
-RMSE_data1<- sqrt(mean((pca_model$residuals)^2)/nrow(data.set1))
-RMSE_data1
-```
-
-3.Define a DOE(Definition of Experiments) to explore with the parametrization of the 10 factors the answer obtains the best value (we consider the minimum one to be the best value).
-
-```{r}
-exp <- data$Answer-1
-model <- aov(data$Answer~exp)
-summary.aov(model)
-
-```
-
-```{r}
-eval_with_pca <- function(factors, rotation, pca_model) {
-  pca_factors <- rotation %*% unlist(factors)
-  answer = pca_model$coefficients %*% c(1,pca_factors[c(1,2)]) 
-  return(answer)
-}
-
-neutral <- function(data){
-  sdevs <- apply(data, 2, sd)
-  means <- apply(data ,2, mean)
-  rand <-rnorm(10,means, sdevs)
-  return(rand)
-}
-
-run_experiments <- function(){
-  
-  data_min <- apply(data, 2, min)
+data_min <- apply(data, 2, min)
   data_max <- apply(data, 2, max)
-  doe <-(data[1,])
-  doe[1,1:10] <- neutral(data)
-  doe <- cbind(Level="neutral", doe)
   
-  doe[1, ]$Answer <- eval_with_pca(doe[1,-c(1,12)], pca$rotation, pca_model)
-  
-  for (i in 1:10) {
-    newdata<-neutral(data)
-    names(newdata)<-NULL
-    newdata[i]<-data_min[i]
-    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
-    row<-c(paste("-", i), newdata, ans)
-    doe[2*i,]<-row
-    newdata[i]<-data_max[i]
-    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
-    row<-c(paste("+", i), newdata, ans)
-    doe[2*i+1,]<-row
-  
+  factorial_design <- expand.grid(Factor1 = c(data_min[1], data_max[1]),
+                                  Factor2 = c(data_min[2], data_max[2]),
+                                  Factor3 = c(data_min[3], data_max[3]),
+                                  Factor4 = c(data_min[4], data_max[4]),
+                                  Factor5 = c(data_min[5], data_max[5]),
+                                  Factor6 = c(data_min[6], data_max[6]),
+                                  Factor7 = c(data_min[7], data_max[7]),
+                                  Factor8 = c(data_min[8], data_max[8]),
+                                  Factor9 = c(data_min[9], data_max[9]),
+                                  Factor10 = c(data_min[10], data_max[10]))
+  get_answer <- function(row){
+      pca_factors <- pca$rotation %*% unlist(row)
+      answer = pca_model$coefficients %*% c(1,pca_factors[c(1,2)]) 
+      return(answer)
   }
-  for(j in 1:9){
-    for( k in (j+1):10){
-    newdata<-neutral(data)
-    newdata[j]<-data_min[j]
-    newdata[k]<-data_min[k]
-    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
-    row<-c(paste("-_-", j,k), newdata, ans)
-    doe <- rbind(doe,row)
-    newdata[j]<-data_min[j]
-    newdata[k]<-data_max[k]
-    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
-    row<-c(paste("-_+", j,k), newdata, ans)
-    doe <- rbind(doe,row)
-    newdata[j]<-data_max[j]
-    newdata[k]<-data_min[k]
-    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
-    row<-c(paste("+_-", j,k), newdata, ans)
-    doe <- rbind(doe,row)
-    newdata[j]<-data_max[j]
-    newdata[k]<-data_max[k]
-    ans <- eval_with_pca(newdata, pca$rotation, pca_model)
-    row<-c(paste("+_+", j,k), newdata, ans)
-    doe <- rbind(doe,row)
-    }
-  }
-  return(doe[c(1,12)])
-}
-doe <- run_experiments()
+  predictions <- apply(factorial_design, 1, get_answer)
+  mp <- c('-', '+')
+  fnames <- list(Factor1 = mp, Factor2 = mp , Factor3 = mp, Factor4 = mp, Factor5 = mp,
+                 Factor6 = mp, Factor7 = mp , Factor8 = mp, Factor9 = mp, Factor10 = mp)
+  library(dae)
+  treats <-fac.gen(generate = fnames,order='yates')
+  y <- apply(factorial_design, 1, get_answer)
+  
+  
+  treats <- data.frame(treats)
+  treats$Y <- c(y)
+  treats[1:10,]
 ```
 
-ANOVA tests for 1-factor and 2-factor
 
-```{r, eval=FALSE}
-
-subset_data <- doe[2:201, ]
-# 1-factor ANOVA
-for (i in 1:10) {
-  subset_data[, i] <- as.factor(subset_data[, i])
-  doe_model <- aov(Answer ~ subset_data[, i+1], data = subset_data)
-  print(paste("One-Factor ANOVA for Factor", i, "vs. Answer:"))
-  print(summary(doe_model))
-}
-
-```
-```{r, eval=FALSE}
-subset_data2 <- doe_model[2:144, ] 
-
-for (i in 1:9) {
-  for (j in (i + 1):10) {
-    subset_data2[, 1:10] <- lapply(subset_data2[, 1:10], as.factor)
-    # Two-Factor ANOVA
-    doe_model <- aov(Answer ~ subset_data2[, i+1] + subset_data2[, j+1], data = subset_data2)
-    # Print ANOVA summary
-    print(paste("Two-Factor ANOVA for Factor", i, "and Factor", j, "vs. Answer:"))
-    print(summary(doe_model))
+```{r}
+aov.res <-aov(y~Factor1*Factor2*Factor3*Factor4*Factor5*Factor6*Factor7*Factor8*Factor9*Factor10,treats)
+  yates<- yates.effects(aov.res, data = treats)
+  # Only print the effects that are not so close to zero
+  for (i in 1:length(yates)){
+    if (abs(yates[i]) > 0.1) print(yates[i])
   }
-}
-
 ```
+## 4. Validation
